@@ -78,10 +78,12 @@ def stream_bedrock(
                 metadata = event["metadata"]
                 if "usage" in metadata:
                     bedrock_usage = metadata["usage"]
+                    input_tokens = bedrock_usage.get("inputTokens", 0)
+                    output_tokens = bedrock_usage.get("outputTokens", 0)
                     usage_data = {
-                        "inputTokens": bedrock_usage.get("inputTokens", 0),
-                        "outputTokens": bedrock_usage.get("outputTokens", 0),
-                        "totalTokens": bedrock_usage.get("totalTokens", 0),
+                        "inputTokens": input_tokens,
+                        "outputTokens": output_tokens,
+                        "totalTokens": input_tokens + output_tokens,
                     }
 
         if text_started and not text_finished:
