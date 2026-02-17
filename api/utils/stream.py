@@ -2,27 +2,39 @@ import json
 import time
 import traceback
 import uuid
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence
-
-from fastapi.responses import StreamingResponse
-from openai import OpenAI
-from openai.types.chat import ChatCompletion
+from typing import Any, Dict, Optional
 
 
-def stream_text(
-    stream: ChatCompletion,
-    available_tools: Mapping[str, Callable[..., Any]],
+def format_sse(payload: dict) -> str:
+    """
+    Format a payload as a Server-Sent Event.
+    
+    This is a shared utility function for formatting SSE responses.
+    Can be reused by other streaming functions if needed.
+    """
+    return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+def stream_bedrock(
+    stream,
     endpoint_name: Optional[str] = None,
     start_time: Optional[float] = None,
 ):
-    """Yield Server-Sent Events for a streaming chat completion."""
+    """
+    Yield Server-Sent Events for AWS Bedrock converse_stream response.
+    
+    Bedrock stream events:
+    - messageStart
+    - contentBlockStart
+    - contentBlockDelta (with delta.text)
+    - contentBlockStop
+    - messageStop
+    - metadata
+    """
     try:
         if start_time is None:
             start_time = time.time()
         first_chunk_logged = False
-
-        def format_sse(payload: dict) -> str:
-            return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
         message_id = f"msg-{uuid.uuid4().hex}"
         text_stream_id = "text-1"
@@ -30,26 +42,20 @@ def stream_text(
         text_finished = False
         finish_reason = None
         usage_data = None
-        tool_calls_state: Dict[int, Dict[str, Any]] = {}
 
         yield format_sse({"type": "start", "messageId": message_id})
 
-        for chunk in stream:
+        for event in stream:
             if not first_chunk_logged:
                 first_chunk_logged = True
                 print(
-                    f"[{endpoint_name or 'stream'}] Time to first chunk: {(time.time() - start_time) * 1000:.2f}ms"
+                    f"[{endpoint_name or 'bedrock-stream'}] Time to first chunk: {(time.time() - start_time) * 1000:.2f}ms"
                 )
-            for choice in chunk.choices:
-                if choice.finish_reason is not None:
-                    finish_reason = choice.finish_reason
 
-                delta = choice.delta
-                if delta is None:
-                    continue
-
-                # print(f"{delta.content}", end="", flush=True)
-                if delta.content is not None:
+            # Handle different event types from Bedrock
+            if "contentBlockDelta" in event:
+                delta = event["contentBlockDelta"]["delta"]
+                if "text" in delta:
                     if not text_started:
                         yield format_sse({"type": "text-start", "id": text_stream_id})
                         text_started = True
@@ -57,163 +63,33 @@ def stream_text(
                         {
                             "type": "text-delta",
                             "id": text_stream_id,
-                            "delta": delta.content,
+                            "delta": delta["text"],
                         }
                     )
 
-                if delta.tool_calls:
-                    for tool_call_delta in delta.tool_calls:
-                        index = tool_call_delta.index
-                        state = tool_calls_state.setdefault(
-                            index,
-                            {
-                                "id": None,
-                                "name": None,
-                                "arguments": "",
-                                "started": False,
-                            },
-                        )
+            elif "messageStop" in event:
+                stop_reason = event["messageStop"].get("stopReason")
+                if stop_reason:
+                    # Map Bedrock stop reasons to our format
+                    # Bedrock: end_turn, max_tokens, stop_sequence, tool_use, content_filtered
+                    if stop_reason == "end_turn":
+                        finish_reason = "stop"
+                    elif stop_reason == "max_tokens":
+                        finish_reason = "length"
+                    else:
+                        finish_reason = stop_reason
 
-                        if tool_call_delta.id is not None:
-                            state["id"] = tool_call_delta.id
-                            if (
-                                state["id"] is not None
-                                and state["name"] is not None
-                                and not state["started"]
-                            ):
-                                yield format_sse(
-                                    {
-                                        "type": "tool-input-start",
-                                        "toolCallId": state["id"],
-                                        "toolName": state["name"],
-                                    }
-                                )
-                                state["started"] = True
-
-                        function_call = getattr(tool_call_delta, "function", None)
-                        if function_call is not None:
-                            if function_call.name is not None:
-                                state["name"] = function_call.name
-                                if (
-                                    state["id"] is not None
-                                    and state["name"] is not None
-                                    and not state["started"]
-                                ):
-                                    yield format_sse(
-                                        {
-                                            "type": "tool-input-start",
-                                            "toolCallId": state["id"],
-                                            "toolName": state["name"],
-                                        }
-                                    )
-                                    state["started"] = True
-
-                            if function_call.arguments:
-                                if (
-                                    state["id"] is not None
-                                    and state["name"] is not None
-                                    and not state["started"]
-                                ):
-                                    yield format_sse(
-                                        {
-                                            "type": "tool-input-start",
-                                            "toolCallId": state["id"],
-                                            "toolName": state["name"],
-                                        }
-                                    )
-                                    state["started"] = True
-
-                                state["arguments"] += function_call.arguments
-                                if state["id"] is not None:
-                                    yield format_sse(
-                                        {
-                                            "type": "tool-input-delta",
-                                            "toolCallId": state["id"],
-                                            "inputTextDelta": function_call.arguments,
-                                        }
-                                    )
-
-            if not chunk.choices and chunk.usage is not None:
-                usage_data = chunk.usage
-
-        if finish_reason == "stop" and text_started and not text_finished:
-            yield format_sse({"type": "text-end", "id": text_stream_id})
-            text_finished = True
-
-        if finish_reason == "tool_calls":
-            for index in sorted(tool_calls_state.keys()):
-                state = tool_calls_state[index]
-                tool_call_id = state.get("id")
-                tool_name = state.get("name")
-
-                if tool_call_id is None or tool_name is None:
-                    continue
-
-                if not state["started"]:
-                    yield format_sse(
-                        {
-                            "type": "tool-input-start",
-                            "toolCallId": tool_call_id,
-                            "toolName": tool_name,
-                        }
-                    )
-                    state["started"] = True
-
-                raw_arguments = state["arguments"]
-                try:
-                    parsed_arguments = (
-                        json.loads(raw_arguments) if raw_arguments else {}
-                    )
-                except Exception as error:
-                    yield format_sse(
-                        {
-                            "type": "tool-input-error",
-                            "toolCallId": tool_call_id,
-                            "toolName": tool_name,
-                            "input": raw_arguments,
-                            "errorText": str(error),
-                        }
-                    )
-                    continue
-
-                yield format_sse(
-                    {
-                        "type": "tool-input-available",
-                        "toolCallId": tool_call_id,
-                        "toolName": tool_name,
-                        "input": parsed_arguments,
+            elif "metadata" in event:
+                metadata = event["metadata"]
+                if "usage" in metadata:
+                    bedrock_usage = metadata["usage"]
+                    input_tokens = bedrock_usage.get("inputTokens", 0)
+                    output_tokens = bedrock_usage.get("outputTokens", 0)
+                    usage_data = {
+                        "inputTokens": input_tokens,
+                        "outputTokens": output_tokens,
+                        "totalTokens": input_tokens + output_tokens,
                     }
-                )
-
-                tool_function = available_tools.get(tool_name)
-                if tool_function is None:
-                    yield format_sse(
-                        {
-                            "type": "tool-output-error",
-                            "toolCallId": tool_call_id,
-                            "errorText": f"Tool '{tool_name}' not found.",
-                        }
-                    )
-                    continue
-
-                try:
-                    tool_result = tool_function(**parsed_arguments)
-                except Exception as error:
-                    yield format_sse(
-                        {
-                            "type": "tool-output-error",
-                            "toolCallId": tool_call_id,
-                            "errorText": str(error),
-                        }
-                    )
-                else:
-                    yield format_sse(
-                        {
-                            "type": "tool-output-available",
-                            "toolCallId": tool_call_id,
-                            "output": tool_result,
-                        }
-                    )
 
         if text_started and not text_finished:
             yield format_sse({"type": "text-end", "id": text_stream_id})
@@ -221,16 +97,14 @@ def stream_text(
 
         finish_metadata: Dict[str, Any] = {}
         if finish_reason is not None:
-            finish_metadata["finishReason"] = finish_reason.replace("_", "-")
+            finish_metadata["finishReason"] = finish_reason
 
         if usage_data is not None:
             usage_payload = {
-                "promptTokens": usage_data.prompt_tokens,
-                "completionTokens": usage_data.completion_tokens,
+                "promptTokens": usage_data["inputTokens"],
+                "completionTokens": usage_data["outputTokens"],
+                "totalTokens": usage_data["totalTokens"],
             }
-            total_tokens = getattr(usage_data, "total_tokens", None)
-            if total_tokens is not None:
-                usage_payload["totalTokens"] = total_tokens
             finish_metadata["usage"] = usage_payload
 
         if finish_metadata:
@@ -239,7 +113,7 @@ def stream_text(
             yield format_sse({"type": "finish"})
 
         print(
-            f"[{endpoint_name or 'stream'}] Total stream time: {(time.time() - start_time) * 1000:.2f}ms"
+            f"[{endpoint_name or 'bedrock-stream'}] Total stream time: {(time.time() - start_time) * 1000:.2f}ms"
         )
 
         yield "data: [DONE]\n\n"
