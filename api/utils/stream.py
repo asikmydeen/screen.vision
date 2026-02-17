@@ -96,9 +96,8 @@ def stream_bedrock(
             usage_payload = {
                 "promptTokens": usage_data["inputTokens"],
                 "completionTokens": usage_data["outputTokens"],
+                "totalTokens": usage_data["totalTokens"],
             }
-            if usage_data.get("totalTokens") is not None:
-                usage_payload["totalTokens"] = usage_data["totalTokens"]
             finish_metadata["usage"] = usage_payload
 
         if finish_metadata:
