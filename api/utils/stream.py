@@ -6,7 +6,12 @@ from typing import Any, Dict, Optional
 
 
 def format_sse(payload: dict) -> str:
-    """Format a payload as a Server-Sent Event."""
+    """
+    Format a payload as a Server-Sent Event.
+    
+    This is a shared utility function for formatting SSE responses.
+    Can be reused by other streaming functions if needed.
+    """
     return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
 

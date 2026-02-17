@@ -32,8 +32,10 @@ def convert_messages_to_bedrock(messages: List[Dict[str, Any]]) -> Tuple[List[Di
     
     Returns:
         (system_messages, bedrock_messages)
-        - system_messages: List of system message dicts with 'text' key
-        - bedrock_messages: List of user/assistant message dicts with 'role' and 'content'
+        - system_messages: List of system message dicts, each with 'text' key containing a string
+                          Example: [{'text': 'You are helpful'}, {'text': 'Be concise'}]
+        - bedrock_messages: List of user/assistant message dicts with 'role' and 'content' keys
+                          Example: [{'role': 'user', 'content': [{'text': 'Hello'}, {'image': {...}}]}]
     """
     system_messages = []
     bedrock_messages = []
