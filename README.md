@@ -24,26 +24,25 @@ The system is straightforward:
 
 ## Models Used
 
-| Model              | Provider         | Purpose                                                                                |
-| ------------------ | ---------------- | -------------------------------------------------------------------------------------- |
-| **GPT-5.2**        | OpenAI           | Primary reasoning: generates step-by-step instructions and answers follow-up questions |
-| **Gemini 3 Flash** | Google AI Studio | Step verification: compares before/after screenshots to confirm action completion      |
-| **Qwen3-VL 30B**   | Fireworks AI     | Coordinate detection: locates specific UI elements on screen                           |
+| Model                     | Provider        | Purpose                                                                                |
+| ------------------------- | --------------- | -------------------------------------------------------------------------------------- |
+| **Claude Sonnet 4**       | AWS Bedrock     | Primary reasoning: generates step-by-step instructions and answers follow-up questions |
+| **Claude 3.5 Haiku**      | AWS Bedrock     | Step verification: compares before/after screenshots to confirm action completion      |
+| **Claude Sonnet 4**       | AWS Bedrock     | Coordinate detection: locates specific UI elements on screen using vision capabilities |
 
 ## Privacy & Security
 
 Screen Vision is designed to process your data securely without retaining it.
 
 - **Zero Data Retention**: No images or screen recordings are stored on the server. All processing happens in real-time, and data is discarded immediately after analysis.
-- **Secure AI Processing**: Screenshots are sent to trusted LLM providers (OpenAI and Fireworks AI) solely for analysis. These providers adhere to strict data handling policies and do not store or use your data to train their models.
-  - [OpenAI Enterprise Privacy](https://platform.openai.com/docs/guides/your-data)
-  - [Fireworks AI Data Handling Policy](https://docs.fireworks.ai/guides/security_compliance/data_handling)
+- **Secure AI Processing**: Screenshots are sent to AWS Bedrock (Amazon's managed AI service) solely for analysis. AWS Bedrock adheres to strict data handling policies and does not store or use your data to train models.
+  - [AWS Bedrock Data Protection](https://docs.aws.amazon.com/bedrock/latest/userguide/data-protection.html)
 
 ## Tech Stack
 
 - **Frontend**: Next.js 13, React 18, Tailwind CSS, Zustand
 - **Backend**: FastAPI, Python
-- **AI**: OpenAI GPT models, Qwen-VL (via OpenRouter)
+- **AI**: AWS Bedrock (Claude Sonnet 4, Claude 3.5 Haiku)
 - **UI**: Radix primitives, Framer Motion, Lucide icons
 
 **Frontend (Next.js + React)**
@@ -88,14 +87,13 @@ pip install -r requirements.txt
 Create a `.env.local` file in the root directory:
 
 ```bash
-# Required - powers the main step-by-step logic
-OPENAI_API_KEY=sk-...
-
-# Required - used for verification and coordinate detection (Qwen models)
-OPENROUTER_API_KEY=sk-or-...
+# AWS Credentials for Bedrock
+AWS_ACCESS_KEY_ID=your-access-key-id
+AWS_SECRET_ACCESS_KEY=your-secret-access-key
+AWS_REGION=us-east-1
 ```
 
-The app uses OpenAI for primary reasoning and OpenRouter to access Qwen-VL models for specific tasks like step verification. You can swap these out by modifying `api/index.py` if you prefer different providers.
+The app uses AWS Bedrock with Claude models for all AI operations. You'll need an AWS account with Bedrock access enabled in your region. You can configure AWS credentials either through environment variables (as shown above) or through standard AWS credential methods (IAM roles, AWS profiles, etc.).
 
 ### Running Locally
 
