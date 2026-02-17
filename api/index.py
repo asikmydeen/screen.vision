@@ -65,7 +65,7 @@ async def handle_step_chat(request: FastAPIRequest, body: MessagesRequest):
     stream = bedrock_runtime.converse_stream(
         modelId=model_id,
         messages=bedrock_messages,
-        system=system_messages if system_messages else None,
+        system=system_messages or None,
         inferenceConfig=inference_config,
     )
 
@@ -96,7 +96,7 @@ async def handle_help_chat(request: FastAPIRequest, body: MessagesRequest):
     stream = bedrock_runtime.converse_stream(
         modelId=model_id,
         messages=bedrock_messages,
-        system=system_messages if system_messages else None,
+        system=system_messages or None,
         inferenceConfig=inference_config,
     )
 
@@ -127,7 +127,7 @@ async def handle_check_chat(request: FastAPIRequest, body: MessagesRequest):
     stream = bedrock_runtime.converse_stream(
         modelId=model_id,
         messages=bedrock_messages,
-        system=system_messages if system_messages else None,
+        system=system_messages or None,
         inferenceConfig=inference_config,
     )
 
@@ -158,7 +158,7 @@ async def handle_coordinate_chat(request: FastAPIRequest, body: MessagesRequest)
     stream = bedrock_runtime.converse_stream(
         modelId=model_id,
         messages=bedrock_messages,
-        system=system_messages if system_messages else None,
+        system=system_messages or None,
         inferenceConfig=inference_config,
     )
 

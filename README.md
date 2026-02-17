@@ -26,9 +26,10 @@ The system is straightforward:
 
 | Model                     | Provider        | Purpose                                                                                |
 | ------------------------- | --------------- | -------------------------------------------------------------------------------------- |
-| **Claude Sonnet 4**       | AWS Bedrock     | Primary reasoning: generates step-by-step instructions and answers follow-up questions |
-| **Claude 3.5 Haiku**      | AWS Bedrock     | Step verification: compares before/after screenshots to confirm action completion      |
-| **Claude Sonnet 4**       | AWS Bedrock     | Coordinate detection: locates specific UI elements on screen using vision capabilities |
+| **Claude Sonnet 4**       | AWS Bedrock     | Primary reasoning: generates step-by-step instructions and answers follow-up questions. Also used for coordinate detection (vision) |
+| **Claude 3.5 Haiku**      | AWS Bedrock     | Step verification: compares before/after screenshots to confirm action completion (fast & cost-effective) |
+
+*Note: Claude Sonnet 4 is used for multiple endpoints (/api/step, /api/help, /api/coordinates) as it provides the best balance of reasoning and vision capabilities.*
 
 ## Privacy & Security
 
